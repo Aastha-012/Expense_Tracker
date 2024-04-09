@@ -1,0 +1,302 @@
+import csv
+import datetime
+import matplotlib
+matplotlib.use('agg')
+import matplotlib.pyplot as plt
+import tkinter as tk
+from tkinter import messagebox
+from tkinter import simpledialog
+from tkinter import filedialog
+
+class ExpenseTracker:
+    def __init__(self):
+        self.expenses = []
+
+    def add_expense(self, category, amount, currency='RUPEES'):
+        date = datetime.date.today()
+        self.expenses.append({'date': date, 'category': category, 'amount': amount, 'currency': currency})
+
+    def delete_expense(self, index):
+        del self.expenses[index]
+
+    def edit_expense(self, index, category, amount, currency='RUPEES'):
+        self.expenses[index] = {'date': self.expenses[index]['date'], 'category': category, 'amount': amount, 'currency': currency}
+
+    def view_expenses(self):
+        return self.expenses
+
+    def view_expenses_by_month(self, month):
+        return [expense for expense in self.expenses if expense['date'].month == month]
+
+    def view_expenses_by_day(self, day):
+        return [expense for expense in self.expenses if expense['date'] == day]
+
+    def save_expenses(self, filename):
+        with open(filename, 'w', newline='') as csvfile:
+            fieldnames = ['date', 'category', 'amount', 'currency']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            for expense in self.expenses:
+                writer.writerow(expense)
+
+    def load_expenses(self, filename):
+        with open(filename, 'r') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                row['date'] = datetime.datetime.strptime(row['date'], '%Y-%m-%d').date()
+                self.expenses.append(row)
+
+    def get_total_spending(self, currency='RUPEES'):
+        total_spending = sum(expense['amount'] for expense in self.expenses if expense['currency'] == currency)
+        return total_spending
+
+    def get_category_spending(self, category, currency='RUPEES'):
+        category_spending = sum(expense['amount'] for expense in self.expenses if expense['category'] == category and expense['currency'] == currency)
+        return category_spending
+
+    def get_categories(self):
+        return set(expense['category'] for expense in self.expenses)
+
+    def get_currencies(self):
+        return set(expense['currency'] for expense in self.expenses)
+
+class Authentication:
+    def __init__(self):
+        self.users = {}
+
+    def add_user(self, username, password):
+        self.users[username] = password
+
+    def authenticate(self, username, password):
+        return self.users.get(username) == password
+
+class ExpenseTrackerApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Expense Tracker")
+        self.tracker = ExpenseTracker()
+        self.auth = Authentication()
+        self.logged_in = False
+
+        self.auth.add_user('user', '1234')
+
+        self.create_login_view()
+
+    def create_login_view(self):
+        self.login_frame = tk.Frame(self.root)
+        self.login_frame.pack(padx=20, pady=20)
+
+        self.username_label = tk.Label(self.login_frame, text="Username:")
+        self.username_label.grid(row=0, column=0)
+        self.username_entry = tk.Entry(self.login_frame)
+        self.username_entry.grid(row=0, column=1)
+
+        self.password_label = tk.Label(self.login_frame, text="Password:")
+        self.password_label.grid(row=1, column=0)
+        self.password_entry = tk.Entry(self.login_frame, show="*")
+        self.password_entry.grid(row=1, column=1)
+
+        self.login_button = tk.Button(self.login_frame, text="Login", command=self.login)
+        self.login_button.grid(row=2, columnspan=2, pady=10)
+
+    def login(self):
+        username = self.username_entry.get()
+        password = self.password_entry.get()
+        if self.auth.authenticate(username, password):
+            self.logged_in = True
+            self.login_frame.destroy()
+            self.create_main_view()
+        else:
+            messagebox.showerror("Error", "Invalid credentials")
+
+    def create_main_view(self):
+        self.main_frame = tk.Frame(self.root)
+        self.main_frame.pack(padx=20, pady=20)
+
+        self.add_expense_button = tk.Button(self.main_frame, text="Add your Expense", command=self.open_add_expense_window)
+        self.add_expense_button.pack()
+
+        self.view_expenses_button = tk.Button(self.main_frame, text="View Expenses", command=self.view_expenses)
+        self.view_expenses_button.pack()
+
+        self.month_expenses_button = tk.Button(self.main_frame, text="View Month Expenses", command=self.view_month_expenses)
+        self.month_expenses_button.pack()
+
+        self.day_expenses_button = tk.Button(self.main_frame, text="View Day Expenses", command=self.view_day_expenses)
+        self.day_expenses_button.pack()
+
+        self.expenses_listbox = tk.Listbox(self.main_frame, width=50)
+        self.expenses_listbox.pack(pady=10)
+
+        self.load_expenses()
+
+        self.total_spending_label = tk.Label(self.main_frame, text="")
+        self.total_spending_label.pack()
+
+        self.update_total_spending_label()
+
+        self.edit_button = tk.Button(self.main_frame, text="Edit your Expenses", command=self.edit_expense)
+        self.edit_button.pack()
+
+        self.delete_button = tk.Button(self.main_frame, text="Delete", command=self.delete_expense)
+        self.delete_button.pack()
+
+        self.export_button = tk.Button(self.main_frame, text="Export Expenses", command=self.export_expenses)
+        self.export_button.pack()
+
+        self.plot_button = tk.Button(self.main_frame, text="Plot Expenses", command=self.plot_expenses)
+        self.plot_button.pack()
+
+    def load_expenses(self):
+        self.expenses_listbox.delete(0, tk.END)
+        for expense in self.tracker.view_expenses():
+            self.expenses_listbox.insert(tk.END, f"{expense['date']} - {expense['category']} - {expense['amount']} ₹{expense['currency']}")
+
+    def update_total_spending_label(self):
+        total_spending = self.tracker.get_total_spending()
+        self.total_spending_label.config(text=f"Total Spending: ₹{total_spending}")
+
+    def open_add_expense_window(self):
+        if not self.logged_in:
+            messagebox.showerror("Error", "Please log in first")
+            return
+
+        self.add_expense_window = tk.Toplevel(self.root)
+        self.add_expense_window.title("Add your Expense")
+
+        self.category_label = tk.Label(self.add_expense_window, text="Category:")
+        self.category_label.grid(row=0, column=0)
+        self.category_entry = tk.Entry(self.add_expense_window)
+        self.category_entry.grid(row=0, column=1)
+
+        self.amount_label = tk.Label(self.add_expense_window, text="Amount:")
+        self.amount_label.grid(row=1, column=0)
+        self.amount_entry = tk.Entry(self.add_expense_window)
+        self.amount_entry.grid(row=1, column=1)
+
+        self.currency_label = tk.Label(self.add_expense_window, text="Currency:")
+        self.currency_label.grid(row=2, column=0)
+        self.currency_entry = tk.Entry(self.add_expense_window)
+        self.currency_entry.grid(row=2, column=1)
+
+        self.add_button = tk.Button(self.add_expense_window, text="Add", command=self.add_expense)
+        self.add_button.grid(row=3, columnspan=2, pady=10)
+
+    def add_expense(self):
+        category = self.category_entry.get()
+        amount = float(self.amount_entry.get())
+        currency = self.currency_entry.get()
+        self.tracker.add_expense(category, amount, currency)
+        self.load_expenses()
+        self.update_total_spending_label()
+        self.add_expense_window.destroy()
+
+    def edit_expense(self):
+        selected_index = self.expenses_listbox.curselection()
+        if not selected_index:
+            messagebox.showerror("Error", "Please select an expense to edit")
+            return
+
+        index = selected_index[0]
+        expense = self.tracker.view_expenses()[index]
+        self.edit_expense_window = tk.Toplevel(self.root)
+        self.edit_expense_window.title("Edit your Expenses")
+
+        self.category_label = tk.Label(self.edit_expense_window, text="Category:")
+        self.category_label.grid(row=0, column=0)
+        self.category_entry = tk.Entry(self.edit_expense_window)
+        self.category_entry.grid(row=0, column=1)
+        self.category_entry.insert(0, expense['category'])
+
+        self.amount_label = tk.Label(self.edit_expense_window, text="Amount:")
+        self.amount_label.grid(row=1, column=0)
+        self.amount_entry = tk.Entry(self.edit_expense_window)
+        self.amount_entry.grid(row=1, column=1)
+        self.amount_entry.insert(0, expense['amount'])
+
+        self.currency_label = tk.Label(self.edit_expense_window, text="Currency:")
+        self.currency_label.grid(row=2, column=0)
+        self.currency_entry = tk.Entry(self.edit_expense_window)
+        self.currency_entry.grid(row=2, column=1)
+        self.currency_entry.insert(0, expense['currency'])
+
+        self.save_button = tk.Button(self.edit_expense_window, text="Save", command=lambda: self.save_edit(index))
+        self.save_button.grid(row=3, columnspan=2, pady=10)
+
+    def save_edit(self, index):
+        category = self.category_entry.get()
+        amount = float(self.amount_entry.get())
+        currency = self.currency_entry.get()
+        self.tracker.edit_expense(index, category, amount, currency)
+        self.load_expenses()
+        self.update_total_spending_label()
+        self.edit_expense_window.destroy()
+
+    def delete_expense(self):
+        selected_index = self.expenses_listbox.curselection()
+        if not selected_index:
+            messagebox.showerror("Error", "Please select an expense to delete")
+            return
+
+        index = selected_index[0]
+        self.tracker.delete_expense(index)
+        self.load_expenses()
+        self.update_total_spending_label()
+
+    def view_expenses(self):
+        view_window = tk.Toplevel(self.root)
+        view_window.title("View Expenses")
+        expenses_text = "\n".join([f"{expense['date']} - {expense['category']} - {expense['amount']} ₹{expense['currency']}" for expense in self.tracker.view_expenses()])
+        expenses_label = tk.Label(view_window, text=expenses_text)
+        expenses_label.pack()
+
+    def view_month_expenses(self):
+        month = simpledialog.askinteger("Month", "Enter the month (1-12):")
+        if month is not None and 1 <= month <= 12:
+            month_expenses = self.tracker.view_expenses_by_month(month)
+            view_window = tk.Toplevel(self.root)
+            view_window.title("Month Expenses")
+            expenses_text = "\n".join([f"{expense['date']} - {expense['category']} - {expense['amount']} ₹{expense['currency']}" for expense in month_expenses])
+            expenses_label = tk.Label(view_window, text=expenses_text)
+            expenses_label.pack()
+        else:
+            messagebox.showerror("Error", "Invalid month")
+
+    def view_day_expenses(self):
+        day = simpledialog.askstring("Day", "Enter the date (YYYY-MM-DD):")
+        if day is not None:
+            try:
+                day = datetime.datetime.strptime(day, '%Y-%m-%d').date()
+                day_expenses = self.tracker.view_expenses_by_day(day)
+                view_window = tk.Toplevel(self.root)
+                view_window.title("Day Expenses")
+                expenses_text = "\n".join([f"{expense['date']} - {expense['category']} - {expense['amount']} ₹{expense['currency']}" for expense in day_expenses])
+                expenses_label = tk.Label(view_window, text=expenses_text)
+                expenses_label.pack()
+            except ValueError:
+                messagebox.showerror("Error", "Invalid date format")
+
+    def export_expenses(self):
+        filename = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+        if filename:
+            self.tracker.save_expenses(filename)
+            messagebox.showinfo("Export Successful", "Expenses exported successfully.")
+
+    def plot_expenses(self):
+        categories = list(self.tracker.get_categories())
+        amounts = [self.tracker.get_category_spending(category) for category in categories]
+
+        plt.figure(figsize=(10, 6))
+        plt.bar(categories, amounts)
+        plt.xlabel('Categories')
+        plt.ylabel('Amount (₹)')
+        plt.title('Expense Distribution')
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+        plt.savefig('expenses_plot.png')
+        plt.close()
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = ExpenseTrackerApp(root)
+    root.mainloop()
